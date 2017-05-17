@@ -1,15 +1,14 @@
 package envcfg
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
+	"text/tabwriter"
 )
-
-const strFormat = "%-12s%-12s%-12s%-12v%-12s%s"
 
 //ParseStruct fiend tag(annotations) for each field as set value
 func ParseStruct(data interface{}) error {
@@ -29,22 +28,6 @@ func ParseStruct(data interface{}) error {
 		return err
 	}
 	return nil
-}
-
-func StringStruct(data interface{}) (string, error) {
-	if data == nil {
-		return "", errors.New("Null refernce exception. Data equals to nil")
-	}
-	p, err := newParser(data)
-	if err != nil {
-		return "", err
-	}
-	err = p.Init()
-	if err != nil {
-		return "", err
-	}
-	p.Parse()
-	return p.String(), nil
 }
 
 type parser struct {
@@ -107,7 +90,7 @@ func (p *parser) Parse() error {
 		flag.Parse()
 	}
 	for _, v := range p.values {
-		err := v.setVariable()
+		err := v.define()
 		if err != nil {
 			return err
 		}
@@ -121,25 +104,21 @@ func (p *parser) Parse() error {
 	return nil
 }
 
-func (p *parser) String() string {
-	var buffer bytes.Buffer
+func (p *parser) fstring(w io.Writer) {
+	if len(p.values) > 0 {
+		fmt.Fprintln(w, "-----\t", "-------\t", "-----\t", "---------\t", "--------\t", "------------\t")
+	}
 	for _, v := range p.values {
-		buffer.WriteString(v.String())
-		buffer.WriteString("\n")
+		v.fstring(w)
 	}
-	buffer.WriteString("\n")
 	for _, v := range p.childs {
-		buffer.WriteString(v.String())
-		buffer.WriteString("\n")
+		v.fstring(w)
 	}
-	return buffer.String()
 }
 
 func printHelp(parser *parser) {
-	//fmt.Fprintln(os.Stdout, "Usage:")
-	// fmt.Fprintln(os.Stdout, "igonred - this field doesn't use property")
-	// fmt.Fprintln(os.Stdout, "required:true - return error if field doesn't declarated")
-	fmt.Fprintf(os.Stdout, strFormat, "Flag:", "EnvVar:", "Type:", "Required:", "Default:", "Description:")
-	fmt.Fprintln(os.Stdout, "")
-	fmt.Fprintln(os.Stdout, parser.String())
+	w := tabwriter.NewWriter(os.Stdout, 3, 3, 3, ' ', tabwriter.AlignRight)
+	fmt.Fprintln(w, "Flag:\t", "EnvVar:\t", "Type:\t", "Required:\t", "Default:\t", "Description:\t")
+	parser.fstring(w)
+	w.Flush()
 }

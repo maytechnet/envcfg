@@ -3,6 +3,7 @@ package envcfg
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strconv"
@@ -65,7 +66,11 @@ func (v *value) EnvVariableName() string {
 }
 
 func (v *value) Description() string {
-	return v.tag.Tag.Get(TagDescription)
+	desc := v.tag.Tag.Get(TagDescription)
+	if desc == "" {
+		return fmt.Sprint("Name: ", v.tag.Name)
+	}
+	return desc
 }
 
 func (v *value) Required() bool {
@@ -81,16 +86,16 @@ func (v *value) Value() string {
 	return v.tag.Tag.Get(TagValue)
 }
 
-func (v *value) setVariable() error {
+func (v *value) define() error {
+	req := v.Required()
 	if !v.field.IsValid() {
-		return fmt.Errorf("field:%s is invalid", v.tag.Name)
+		return v.exdef(req, fmt.Errorf("field:%s is invalid", v.tag.Name))
 	}
 	if !v.field.CanSet() {
-		//v.field = reflect.Indirect(v.field)
-		return fmt.Errorf("field:%s is not settable", v.tag.Name)
+		return v.exdef(req, fmt.Errorf("field:%s is not settable", v.tag.Name))
 	}
 	if v.field.Kind() == reflect.Struct {
-		return fmt.Errorf("field:%s invalid, type struct is unsupported", v.tag.Name)
+		return v.exdef(req, fmt.Errorf("field:%s invalid, type struct is unsupported", v.tag.Name))
 	}
 	//check flag value
 	if v.val == "" {
@@ -99,7 +104,7 @@ func (v *value) setVariable() error {
 		if envvar != "" {
 			v.val = os.Getenv(envvar)
 		}
-		if v.val == "" && v.Required() {
+		if v.val == "" && req {
 			return fmt.Errorf("field:%s is required field", v.tag.Name)
 		} else if v.val == "" {
 			v.val = v.Value() //set default value
@@ -136,7 +141,7 @@ func (v *value) setVariable() error {
 	case reflect.String:
 		v.field.SetString(v.val)
 	default:
-		return fmt.Errorf("field:%s has unsupported type %s", v.tag.Name, v.tag.Type)
+		return v.exdef(req, fmt.Errorf("field:%s has unsupported type %s", v.tag.Name, v.tag.Type))
 	}
 	return nil
 }
@@ -157,8 +162,20 @@ func (v *value) String() string {
 		env = "ignored"
 	}
 	val := v.Value()
-	if val == "*" {
-		val = "require/not defined"
+	if val == "" {
+		val = "N/D"
 	}
-	return fmt.Sprintf(strFormat, flag, env, v.tag.Type, v.Required(), val, v.Description())
+	return fmt.Sprintf("%s\t%s\t%s\t%t\t%s\t%s\t", flag, env, v.tag.Type, v.Required(), val, v.Description())
+}
+
+func (v *value) exdef(rq bool, err error) error {
+	if rq {
+		return err
+	} else {
+		return nil
+	}
+}
+
+func (v *value) fstring(w io.Writer) {
+	fmt.Fprintln(w, v.String())
 }
