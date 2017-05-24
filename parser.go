@@ -10,6 +10,13 @@ import (
 	"text/tabwriter"
 )
 
+const (
+	FlagCfgFile      = "config"
+	UsageFlagCfgFile = "path to config file"
+)
+
+var cfgfile string
+
 //ParseStruct fiend tag(annotations) for each field as set value
 func ParseStruct(data interface{}) error {
 	if data == nil {
@@ -19,10 +26,14 @@ func ParseStruct(data interface{}) error {
 	if err != nil {
 		return err
 	}
+	p.configFile = newConfigFile()
+	flag.StringVar(&cfgfile, FlagCfgFile, "", UsageFlagCfgFile)
 	err = p.Init()
 	if err != nil {
 		return err
 	}
+	flag.Parse()
+	p.configFile.Unmarshal(cfgfile, data)
 	err = p.Parse()
 	if err != nil {
 		return err
@@ -31,11 +42,12 @@ func ParseStruct(data interface{}) error {
 }
 
 type parser struct {
-	value  reflect.Value
-	rtype  reflect.Type
-	parent *parser
-	childs []*parser
-	values []*value
+	value      reflect.Value
+	rtype      reflect.Type
+	configFile configFile
+	parent     *parser
+	childs     []*parser
+	values     []*value
 }
 
 func newParser(data interface{}) (*parser, error) {
@@ -68,6 +80,7 @@ func (p *parser) Init() error {
 				return err
 			}
 			p.childs = append(p.childs, cp)
+			cp.configFile = p.configFile
 			err = cp.Init()
 			if err != nil {
 				return err
@@ -76,7 +89,7 @@ func (p *parser) Init() error {
 		}
 		//TODO: check on another type
 		vl := newValue(v, p.rtype.Field(i))
-		vl.Init()
+		vl.owner = p
 		p.values = append(p.values, vl)
 	}
 	if p.parent == nil {
@@ -86,9 +99,6 @@ func (p *parser) Init() error {
 }
 
 func (p *parser) Parse() error {
-	if p.parent == nil {
-		flag.Parse()
-	}
 	for _, v := range p.values {
 		err := v.define()
 		if err != nil {
@@ -104,10 +114,14 @@ func (p *parser) Parse() error {
 	return nil
 }
 
-func (p *parser) fstring(w io.Writer) {
-	if len(p.values) > 0 {
-		fmt.Fprintln(w, "-----\t", "-------\t", "-----\t", "---------\t", "--------\t", "------------\t")
+func (p *parser) Path() string {
+	if p.parent == nil {
+		return ""
 	}
+	return p.parent.Path() + p.rtype.Name() + p.configFile.GroupSeparator()
+}
+
+func (p *parser) fstring(w io.Writer) {
 	for _, v := range p.values {
 		v.fstring(w)
 	}
@@ -117,8 +131,8 @@ func (p *parser) fstring(w io.Writer) {
 }
 
 func printHelp(parser *parser) {
-	w := tabwriter.NewWriter(os.Stdout, 3, 3, 3, ' ', tabwriter.AlignRight)
-	fmt.Fprintln(w, "Flag:\t", "EnvVar:\t", "Type:\t", "Required:\t", "Default:\t", "Description:\t")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.DiscardEmptyColumns)
 	parser.fstring(w)
+	fmt.Fprint(w, "\n-", FlagCfgFile, "\t", UsageFlagCfgFile)
 	w.Flush()
 }

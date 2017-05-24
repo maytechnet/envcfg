@@ -21,93 +21,87 @@ import (
 const (
 	TagFlag        = "flag"
 	TagEnv         = "env"
-	TagValue       = "default"
+	TagDefault     = "default"
 	TagRequired    = "required"
 	TagDescription = "description"
+	TagIgnored     = "-"
+	TagNotDefined  = ""
+
+	valIgnored    = "ignored"
+	valNotDefined = "N/D"
+	valDefault    = "*"
 )
 
 type value struct {
-	field reflect.Value
-	tag   reflect.StructField
-	val   string
+	owner    *parser
+	field    reflect.Value
+	tag      reflect.StructField
+	flagv    string //flag name
+	envv     string //env val
+	cfgval   string //value from config file
+	def      string //default value
+	val      string //current
+	required bool
+	desc     string
 }
 
 func newValue(field reflect.Value, tag reflect.StructField) *value {
-	return &value{field: field, tag: tag}
-}
-
-func (v *value) Init() {
-	if v.FlagName() != "" {
-		flag.StringVar(&v.val, v.FlagName(), "", v.Description())
+	v := &value{field: field, tag: tag}
+	//Parse env value
+	v.envv = v.tag.Tag.Get(TagEnv)
+	if v.envv == TagNotDefined {
+		v.envv = TagIgnored
+	} else if v.envv == valDefault {
+		v.envv = strings.ToUpper(v.tag.Name)
 	}
-}
-
-func (v *value) FlagName() string {
-	fl := v.tag.Tag.Get(TagFlag)
-	if fl == "-" {
-		return ""
+	//Parse flag value
+	v.flagv = tag.Tag.Get(TagFlag)
+	if v.flagv == TagNotDefined {
+		v.flagv = TagIgnored
+	} else if strings.ToLower(v.flagv) == valDefault {
+		v.flagv = strings.ToLower(tag.Name)
 	}
-	if fl == "" {
-		return strings.ToLower(v.tag.Name)
-	}
-	return fl
-}
-
-//return env tag name or field name
-func (v *value) EnvVariableName() string {
-	fl := v.tag.Tag.Get(TagEnv)
-	if fl == "-" {
-		return ""
-	}
-	if fl == "" {
-		fl = v.tag.Name
-	}
-	return strings.ToUpper(fl)
-}
-
-func (v *value) Description() string {
-	desc := v.tag.Tag.Get(TagDescription)
-	if desc == "" {
-		return fmt.Sprint("Name: ", v.tag.Name)
-	}
-	return desc
-}
-
-func (v *value) Required() bool {
+	//Parse description
+	v.desc = v.tag.Tag.Get(TagDescription)
+	//Parse required
 	rq := v.tag.Tag.Get(TagRequired)
-	res, err := strconv.ParseBool(rq)
+	var err error
+	v.required, err = strconv.ParseBool(rq)
 	if err != nil {
-		return false
+		v.required = false
 	}
-	return res
-}
-
-func (v *value) Value() string {
-	return v.tag.Tag.Get(TagValue)
+	//Parse default value
+	v.def = tag.Tag.Get(TagDefault)
+	//set flag
+	if v.flagv != TagIgnored {
+		flag.StringVar(&v.val, v.flagv, "", v.desc)
+	}
+	return v
 }
 
 func (v *value) define() error {
-	req := v.Required()
 	if !v.field.IsValid() {
-		return v.exdef(req, fmt.Errorf("field:%s is invalid", v.tag.Name))
+		return v.exdef(fmt.Errorf("field:%s is invalid", v.tag.Name))
 	}
 	if !v.field.CanSet() {
-		return v.exdef(req, fmt.Errorf("field:%s is not settable", v.tag.Name))
+		return v.exdef(fmt.Errorf("field:%s is not settable", v.tag.Name))
 	}
 	if v.field.Kind() == reflect.Struct {
-		return v.exdef(req, fmt.Errorf("field:%s invalid, type struct is unsupported", v.tag.Name))
+		return v.exdef(fmt.Errorf("field:%s invalid, type struct is unsupported", v.tag.Name))
 	}
 	//check flag value
 	if v.val == "" {
 		//set os value
-		envvar := v.EnvVariableName()
-		if envvar != "" {
-			v.val = os.Getenv(envvar)
+		if v.envv != "" {
+			v.val = os.Getenv(v.envv)
 		}
-		if v.val == "" && req {
+		if v.owner.configFile.Contains(v.Name()) {
+			return nil //defined in config file
+		}
+		if v.val == "" && v.required {
 			return fmt.Errorf("field:%s is required field", v.tag.Name)
 		} else if v.val == "" {
-			v.val = v.Value() //set default value
+			v.val = v.def
 			if v.val == "" {
 				return nil //default value not declared
 			}
@@ -121,13 +115,13 @@ func (v *value) define() error {
 		}
 		v.field.SetBool(i)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(v.val, 10, 64)
+		i, err := strconv.ParseInt(v.val, 0, 64)
 		if err != nil {
 			return err
 		}
 		v.field.SetInt(i)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		i, err := strconv.ParseUint(v.val, 10, 64)
+		i, err := strconv.ParseUint(v.val, 0, 64)
 		if err != nil {
 			return err
 		}
@@ -141,7 +135,7 @@ func (v *value) define() error {
 	case reflect.String:
 		v.field.SetString(v.val)
 	default:
-		return v.exdef(req, fmt.Errorf("field:%s has unsupported type %s", v.tag.Name, v.tag.Type))
+		return v.exdef(fmt.Errorf("field:%s has unsupported type %s", v.tag.Name, v.tag.Type))
 	}
 	return nil
 }
@@ -150,26 +144,30 @@ func (v *value) String() string {
 	if v.field.Kind() == reflect.Struct || v.field.Kind() == reflect.Ptr {
 		return ""
 	}
-	flag := v.FlagName()
-	if flag == "" {
-		flag = "ignored"
+	flag := v.flagv
+	if flag == TagIgnored {
+		flag = valIgnored
 	} else {
 		flag = "-" + flag
 	}
 
-	env := v.EnvVariableName()
-	if env == "" {
-		env = "ignored"
+	env := v.envv
+	if env == TagIgnored {
+		env = valIgnored
 	}
-	val := v.Value()
-	if val == "" {
-		val = "N/D"
+	val := v.def
+	if val == TagNotDefined {
+		val = valNotDefined
 	}
-	return fmt.Sprintf("%s\t%s\t%s\t%t\t%s\t%s\t", flag, env, v.tag.Type, v.Required(), val, v.Description())
+	return fmt.Sprintf("%s:\t\t\t\n\t%s\tEnvVar: %s\n\t\tRequired: %t\n\t\tDefault: %s\n\t\tDescription: %s", v.Name(), flag, env, v.required, val, v.desc)
 }
 
-func (v *value) exdef(rq bool, err error) error {
-	if rq {
+func (v *value) Name() string {
+	return v.owner.Path() + v.tag.Name
+}
+
+func (v *value) exdef(err error) error {
+	if v.required {
 		return err
 	} else {
 		return nil
