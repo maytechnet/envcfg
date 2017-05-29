@@ -159,7 +159,11 @@ func (v *value) String() string {
 	if val == TagNotDefined {
 		val = valNotDefined
 	}
-	return fmt.Sprintf("%s:\t\t\t\n\t%s\tEnvVar: %s\n\t\tRequired: %t\n\t\tDefault: %s\n\t\tDescription: %s", v.Name(), flag, env, v.required, val, v.desc)
+	line := fmt.Sprintf("%s:\t\t\t\n\t%s\tEnvVar: %s\n\t\tRequired: %t\n\t\tDefault: %s", v.Name(), flag, env, v.required, val)
+	if v.desc != "" {
+		line = fmt.Sprint(line, "\n\t\tDescription:", v.desc)
+	}
+	return line
 }
 
 func (v *value) Name() string {
