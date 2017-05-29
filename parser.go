@@ -155,5 +155,6 @@ func (p *parser) usage() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.DiscardEmptyColumns)
 	p.fstring(w)
 	fmt.Fprint(w, "\n-", FlagCfgFile, "\\-", FlagCfgFileShort, "\t", UsageFlagCfgFile)
+	fmt.Fprintln(w)
 	w.Flush()
 }
