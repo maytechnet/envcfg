@@ -169,9 +169,8 @@ func (v *value) Name() string {
 func (v *value) exdef(err error) error {
 	if v.required {
 		return err
-	} else {
-		return nil
 	}
+	return nil
 }
 
 func (v *value) fstring(w io.Writer) {

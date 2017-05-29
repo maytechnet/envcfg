@@ -12,6 +12,7 @@ import (
 
 const (
 	FlagCfgFile      = "config"
+	FlagCfgFileShort = "c"
 	UsageFlagCfgFile = "path to config file"
 )
 
@@ -28,6 +29,7 @@ func ParseStruct(data interface{}) error {
 	}
 	p.configFile = newConfigFile()
 	flag.StringVar(&cfgfile, FlagCfgFile, "", UsageFlagCfgFile)
+	flag.StringVar(&cfgfile, FlagCfgFileShort, "", UsageFlagCfgFile)
 	err = p.Init()
 	if err != nil {
 		return err
@@ -133,6 +135,6 @@ func (p *parser) fstring(w io.Writer) {
 func printHelp(parser *parser) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.DiscardEmptyColumns)
 	parser.fstring(w)
-	fmt.Fprint(w, "\n-", FlagCfgFile, "\t", UsageFlagCfgFile)
+	fmt.Fprint(w, "\n-", FlagCfgFile, "\\-", FlagCfgFileShort, "\t", UsageFlagCfgFile)
 	w.Flush()
 }
