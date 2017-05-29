@@ -114,7 +114,7 @@ func (p *parser) Init() error {
 		p.values = append(p.values, vl)
 	}
 	if p.parent == nil {
-		flag.Usage = func() { printHelp(p) }
+		flag.Usage = p.usage
 	}
 	return nil
 }
@@ -151,9 +151,9 @@ func (p *parser) fstring(w io.Writer) {
 	}
 }
 
-func printHelp(parser *parser) {
+func (p *parser) usage() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.DiscardEmptyColumns)
-	parser.fstring(w)
+	p.fstring(w)
 	fmt.Fprint(w, "\n-", FlagCfgFile, "\\-", FlagCfgFileShort, "\t", UsageFlagCfgFile)
 	w.Flush()
 }
