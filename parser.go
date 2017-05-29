@@ -7,15 +7,22 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"reflect"
 	"text/tabwriter"
 )
 
 const (
-	FlagCfgFile      = "config"
 	FlagCfgFileShort = "c"
-	UsageFlagCfgFile = "path to config file"
+	FlagCfgFile      = "config"
+	UsageFlagCfgFile = "path to config file or folder where can be config file"
+
+	// FlagVerboseShort = "v"
+	// FlagVerbose      = "verbose"
+	// UsageFlagVerbose = "print internal messages(info/error)"
+
+	FlagCfgExt        = "config-ext"
+	FlagCfgExtDefault = ".conf.default"
+	UsageFlagCfgExt   = "config file extension to search by it"
 )
 
 var cfgfile string
@@ -32,21 +39,21 @@ func ParseStruct(data interface{}) error {
 	p.configFile = newConfigFile()
 	flag.StringVar(&cfgfile, FlagCfgFile, "", UsageFlagCfgFile)
 	flag.StringVar(&cfgfile, FlagCfgFileShort, "", UsageFlagCfgFile)
+	var ext string
+	flag.StringVar(&ext, FlagCfgExt, FlagCfgExtDefault, UsageFlagCfgExt)
 	err = p.Init()
 	if err != nil {
 		return err
 	}
 	flag.Parse()
-	if cfgfile == "" {
-		//set default path(near executable)
-		cfgfile, err = filepath.Abs(filepath.Dir(os.Args[0]))
-		if err != nil {
-			log.Printf("error on create config file path: %s\n", err)
-		}
-	}
-	err = p.configFile.Unmarshal(cfgfile, data)
+	cfgfile, err = configFilePath(cfgfile, ext)
 	if err != nil {
-		log.Printf("error on unmarshal config file: %s\n", err)
+		log.Println(err)
+	} else {
+		err = p.configFile.Unmarshal(cfgfile, data)
+		if err != nil {
+			log.Printf("error on unmarshal config file: %s\n", err)
+		}
 	}
 	err = p.Parse()
 	if err != nil {
