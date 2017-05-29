@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"text/tabwriter"
 )
@@ -35,7 +37,17 @@ func ParseStruct(data interface{}) error {
 		return err
 	}
 	flag.Parse()
-	p.configFile.Unmarshal(cfgfile, data)
+	if cfgfile == "" {
+		//set default path(near executable)
+		cfgfile, err = filepath.Abs(filepath.Dir(os.Args[0]))
+		if err != nil {
+			log.Printf("error on create config file path: %s\n", err)
+		}
+	}
+	err = p.configFile.Unmarshal(cfgfile, data)
+	if err != nil {
+		log.Printf("error on unmarshal config file: %s\n", err)
+	}
 	err = p.Parse()
 	if err != nil {
 		return err
