@@ -19,11 +19,11 @@ const (
 
 	FlagVerboseShort = "v-cfg"
 	FlagVerbose      = "verbose-cfg"
-	UsageFlagVerbose = "print internal messages(info/error)"
+	UsageFlagVerbose = "print internal messages"
 
 	FlagCfgExt        = "config-ext"
 	FlagCfgExtDefault = ".conf.default"
-	UsageFlagCfgExt   = "config file extension to search by it"
+	UsageFlagCfgExt   = "config file extension (search pattern)"
 )
 
 var (
@@ -171,7 +171,10 @@ func (p *parser) fstring(w io.Writer) {
 func (p *parser) usage() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.DiscardEmptyColumns)
 	p.fstring(w)
+	fmt.Fprint(w, "Package flag usage:")
 	fmt.Fprint(w, "\n-", FlagCfgFile, "\\-", FlagCfgFileShort, "\t", UsageFlagCfgFile)
+	fmt.Fprint(w, "\n-", FlagCfgExt, "(", FlagCfgExtDefault, ")", "\t", UsageFlagCfgExt)
+	fmt.Fprint(w, "\n-", FlagVerbose, "\\-", FlagVerboseShort, "(", false, ")", "\t", UsageFlagVerbose)
 	fmt.Fprintln(w)
 	w.Flush()
 }
