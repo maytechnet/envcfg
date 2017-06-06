@@ -5,10 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"text/tabwriter"
+
+	"github.com/maytechnet/logger"
 )
 
 const (
@@ -16,16 +17,20 @@ const (
 	FlagCfgFile      = "config"
 	UsageFlagCfgFile = "path to config file or folder where can be config file"
 
-	// FlagVerboseShort = "v"
-	// FlagVerbose      = "verbose"
-	// UsageFlagVerbose = "print internal messages(info/error)"
+	FlagVerboseShort = "v-cfg"
+	FlagVerbose      = "verbose-cfg"
+	UsageFlagVerbose = "print internal messages(info/error)"
 
 	FlagCfgExt        = "config-ext"
 	FlagCfgExtDefault = ".conf.default"
 	UsageFlagCfgExt   = "config file extension to search by it"
 )
 
-var cfgfile string
+var (
+	cfgfile string
+	verbose bool
+	cfglog  logger.Logger
+)
 
 //ParseStruct fiend tag(annotations) for each field as set value
 func ParseStruct(data interface{}) error {
@@ -41,18 +46,27 @@ func ParseStruct(data interface{}) error {
 	flag.StringVar(&cfgfile, FlagCfgFileShort, "", UsageFlagCfgFile)
 	var ext string
 	flag.StringVar(&ext, FlagCfgExt, FlagCfgExtDefault, UsageFlagCfgExt)
+	//define verbose
+	flag.BoolVar(&verbose, FlagVerbose, false, UsageFlagVerbose)
+	flag.BoolVar(&verbose, FlagVerboseShort, false, UsageFlagVerbose)
 	err = p.Init()
 	if err != nil {
 		return err
 	}
 	flag.Parse()
+	logwl := "FATAL"
+	if verbose {
+		logwl = "DEBUG"
+	}
+	fmtlog := logger.NewFmtLogger(logwl)
+	cfglog = fmtlog.With("enfcfg")
 	cfgfile, err = configFilePath(cfgfile, ext)
 	if err != nil {
-		log.Println(err)
+		cfglog.Errorln(err)
 	} else {
 		err = p.configFile.Unmarshal(cfgfile, data)
 		if err != nil {
-			log.Printf("error on unmarshal config file: %s\n", err)
+			cfglog.Errorf("error on unmarshal config file: %s\n", err)
 		}
 	}
 	err = p.Parse()
@@ -124,6 +138,9 @@ func (p *parser) Parse() error {
 		err := v.define()
 		if err != nil {
 			return err
+		}
+		if verbose {
+			cfglog.Debugf("key=%s;value=%v", v.Name(), v.field)
 		}
 	}
 	for _, v := range p.childs {
