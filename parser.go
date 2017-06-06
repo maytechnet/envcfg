@@ -5,31 +5,25 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"text/tabwriter"
-
-	"github.com/maytechnet/logger"
 )
 
 const (
 	FlagCfgFileShort = "c"
 	FlagCfgFile      = "config"
-	UsageFlagCfgFile = "path to config file or folder where can be config file"
+	UsageFlagCfgFile = "config file path"
 
 	FlagVerboseShort = "v-cfg"
 	FlagVerbose      = "verbose-cfg"
 	UsageFlagVerbose = "print internal messages"
-
-	FlagCfgExt        = "config-ext"
-	FlagCfgExtDefault = ".conf.default"
-	UsageFlagCfgExt   = "config file extension (search pattern)"
 )
 
 var (
 	cfgfile string
 	verbose bool
-	cfglog  logger.Logger
 )
 
 //ParseStruct fiend tag(annotations) for each field as set value
@@ -44,8 +38,6 @@ func ParseStruct(data interface{}) error {
 	p.configFile = newConfigFile()
 	flag.StringVar(&cfgfile, FlagCfgFile, "", UsageFlagCfgFile)
 	flag.StringVar(&cfgfile, FlagCfgFileShort, "", UsageFlagCfgFile)
-	var ext string
-	flag.StringVar(&ext, FlagCfgExt, FlagCfgExtDefault, UsageFlagCfgExt)
 	//define verbose
 	flag.BoolVar(&verbose, FlagVerbose, false, UsageFlagVerbose)
 	flag.BoolVar(&verbose, FlagVerboseShort, false, UsageFlagVerbose)
@@ -54,19 +46,10 @@ func ParseStruct(data interface{}) error {
 		return err
 	}
 	flag.Parse()
-	logwl := "FATAL"
-	if verbose {
-		logwl = "DEBUG"
-	}
-	fmtlog := logger.NewFmtLogger(logwl)
-	cfglog = fmtlog.With("enfcfg")
-	cfgfile, err = configFilePath(cfgfile, ext)
-	if err != nil {
-		cfglog.Errorln(err)
-	} else {
+	if cfgfile != "" {
 		err = p.configFile.Unmarshal(cfgfile, data)
-		if err != nil {
-			cfglog.Errorf("error on unmarshal config file: %s\n", err)
+		if err != nil && verbose {
+			p.log.Printf("error on unmarshal config file: %s\n", err)
 		}
 	}
 	err = p.Parse()
@@ -83,6 +66,7 @@ type parser struct {
 	parent     *parser
 	childs     []*parser
 	values     []*value
+	log        *log.Logger
 }
 
 func newParser(data interface{}) (*parser, error) {
@@ -91,6 +75,7 @@ func newParser(data interface{}) (*parser, error) {
 
 func newChildParser(parent *parser, rvalue reflect.Value) (*parser, error) {
 	p := &parser{}
+	p.log = log.New(os.Stdout, "", log.Ldate|log.Ltime)
 	p.value = rvalue //reflect.ValueOf(data) //get reflect value
 	if p.value.Kind() == reflect.Ptr {
 		//check on nil
@@ -140,7 +125,7 @@ func (p *parser) Parse() error {
 			return err
 		}
 		if verbose {
-			cfglog.Debugf("key=%s;value=%v", v.Name(), v.field)
+			p.log.Printf("key=%s;value=%v", v.Name(), v.field)
 		}
 	}
 	for _, v := range p.childs {
@@ -171,10 +156,10 @@ func (p *parser) fstring(w io.Writer) {
 func (p *parser) usage() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.DiscardEmptyColumns)
 	p.fstring(w)
-	fmt.Fprint(w, "Package flag usage:")
-	fmt.Fprint(w, "\n-", FlagCfgFile, "\\-", FlagCfgFileShort, "\t", UsageFlagCfgFile)
-	fmt.Fprint(w, "\n-", FlagCfgExt, "(", FlagCfgExtDefault, ")", "\t", UsageFlagCfgExt)
-	fmt.Fprint(w, "\n-", FlagVerbose, "\\-", FlagVerboseShort, "(", false, ")", "\t", UsageFlagVerbose)
+	fmt.Fprintln(w, "Package flag usage:")
+	fmt.Fprintf(w, "-%s, -%s\t%s", FlagCfgFileShort, FlagCfgFile, UsageFlagCfgFile)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "-%s, -%s\t%s", FlagVerboseShort, FlagVerbose, UsageFlagVerbose)
 	fmt.Fprintln(w)
 	w.Flush()
 }
